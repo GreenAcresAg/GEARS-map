@@ -347,8 +347,8 @@ map.on("click", (e) => {
     if (!map.queryRenderedFeatures(e.point, { layers: ["wells-points"] }).length) closeDetailPanel();
 });
 
-/* ── Places-of-Use parcel hover popup ────────────────────────────── */
-map.on("mousemove", "pou-fill", (e) => {
+/* ── Places-of-Use parcel hover popup (Kings pmtiles + Tulare geojson) ── */
+function pouPopup(e) {
     if (!e.features.length) return;
     const apn = e.features[0].properties.APN, d = pouData[apn];
     if (!d) return;
@@ -363,8 +363,11 @@ map.on("mousemove", "pou-fill", (e) => {
     popup.classList.remove("hidden");
     popup.style.left = (e.originalEvent.clientX + 12) + "px";
     popup.style.top  = (e.originalEvent.clientY - 12) + "px";
+}
+["pou-fill", "pou-tulare-fill"].forEach(l => {
+    map.on("mousemove", l, pouPopup);
+    map.on("mouseleave", l, () => { map.getCanvas().style.cursor = ""; popup.classList.add("hidden"); });
 });
-map.on("mouseleave", "pou-fill", () => { map.getCanvas().style.cursor = ""; popup.classList.add("hidden"); });
 
 /* ── Color-mode switch ───────────────────────────────────────────── */
 document.getElementById("color-mode").addEventListener("change", (e) => {
@@ -419,6 +422,15 @@ function loadParcels() {
             "line-opacity": 0.6,
         } });
     loadPOU();
+
+    // ── Tulare County POU parcels (GeoJSON pulled from county service; color baked in) ──
+    map.addSource("pou-tulare", { type: "geojson", data: "data/tulare_pou_parcels.geojson" });
+    map.addLayer({ id: "pou-tulare-fill", type: "fill", source: "pou-tulare",
+        layout: { visibility: "none" }, minzoom: 9,
+        paint: { "fill-color": ["get", "color"], "fill-opacity": 0.6 } });
+    map.addLayer({ id: "pou-tulare-outline", type: "line", source: "pou-tulare",
+        layout: { visibility: "none" }, minzoom: 11,
+        paint: { "line-color": "#0f172a", "line-width": 0.6, "line-opacity": 0.6 } });
 }
 
 // POU per-parcel attributes, keyed by APN → set as feature-state on the parcels source
@@ -474,7 +486,7 @@ function loadCorcoranDepth() {
 document.querySelectorAll("[data-layer]").forEach(cb => cb.addEventListener("change", () => {
     const id = cb.dataset.layer, vis = cb.checked ? "visible" : "none";
     const groups = { crops:["crops","crops-fill"], parcels:["parcels","parcels-fill"],
-        pou:["pou-fill","pou-outline"],
+        pou:["pou-fill","pou-outline","pou-tulare-fill","pou-tulare-outline"],
         "corcoran-clay":["corcoran-clay"], "corcoran-depth":["corcoran-depth"], "wells-heat":["wells-heat"] };
     (groups[id] || [id]).forEach(l => { if (map.getLayer(l)) map.setLayoutProperty(l, "visibility", vis); });
 }));
