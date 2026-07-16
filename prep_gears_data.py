@@ -68,6 +68,7 @@ for r in rd("pou"):
 owner={}
 for r in rd("owner"):
     owner[(r.get("Contact ID") or "").strip()] = (
+        (r.get("Owner Name") or "").strip(),
         num(r.get("Owner Total GW Extraction Volume (AF)")), (r.get("Owner Number of Wells") or "").strip())
 
 def primary(lst):
@@ -95,7 +96,7 @@ cols=["well_id","contact_id","well_name","longitude","latitude","apn","county","
  "total_depth_ft","screen_top_ft","screen_bottom_ft","casing_in",
  "purpose","purpose_all","irr_acreage","irr_method","pou_count","pou_apns",
  "method","ext_total_af","ext_flag","ext_tule_wy2025","ext_tl_partial2025","ext_tl_partial2024",
- "ext_monthly","owner_total_af","owner_num_wells"]
+ "ext_monthly","owner_name","owner_total_af","owner_num_wells"]
 IMPLAUSIBLE_AF = 100000  # single-well total above this is a certain reporting error
 SUBNAME={"5-022.12":"Tulare Lake","5-022.13":"Tule","5-022.08":"Kings","5-022.11":"Kaweah",
  "5-022.16":"Pleasant Valley","5-022.17":"Westside","5-022.09":"Delta-Mendota","5-022.14":"Kern County"}
@@ -115,7 +116,7 @@ with open(OUT,"w",newline="") as fh:
         if flag: n_flag+=1
         cid=(r.get("Contact ID") or "").strip()
         sn=(r.get("Groundwater Subbasin Name") or "").strip()
-        ot,onw = owner.get(cid,(0.0,""))
+        oname,ot,onw = owner.get(cid,("",0.0,""))
         w.writerow({
          "well_id":wid,"contact_id":cid,"well_name":r.get("Well Name",""),
          "longitude":f"{lon:.6f}","latitude":f"{lat:.6f}","apn":r.get("APN of Well",""),
@@ -138,7 +139,7 @@ with open(OUT,"w",newline="") as fh:
          "ext_tl_partial2025":f"{ext_wy[wid]['tl_partial2025']:.1f}" if ext_wy[wid]['tl_partial2025'] else "",
          "ext_tl_partial2024":f"{ext_wy[wid]['tl_partial2024']:.1f}" if ext_wy[wid]['tl_partial2024'] else "",
          "ext_monthly":"|".join(f"{v:.1f}" for v in ext_monthly[wid]) if ext_total[wid] else "",
-         "owner_total_af":f"{ot:.1f}" if ot else "","owner_num_wells":onw,
+         "owner_name":oname,"owner_total_af":f"{ot:.1f}" if ot else "","owner_num_wells":onw,
         })
         n_out+=1
 

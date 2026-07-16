@@ -160,6 +160,7 @@ function buildLegendAndToggles() {
 /* ── Filtering ───────────────────────────────────────────────────── */
 function fval(id){ return document.getElementById(id).value; }
 function applyFilters() {
+    const owner = fval("filter-owner").trim().toLowerCase();
     const sub = fval("filter-subbasin"), cty = fval("filter-county"), st = fval("filter-status"),
           pur = fval("filter-purpose"), meth = fval("filter-method"), dm = fval("filter-deminimis"),
           eMin = num(fval("filter-ext-min")), eMax = num(fval("filter-ext-max")),
@@ -170,6 +171,7 @@ function applyFilters() {
 
     filteredWells = allWells.filter(w => {
         if (!activeCats.has(m.cat(w))) return false;
+        if (owner && !(w.owner_name || "").toLowerCase().includes(owner)) return false;
         if (sub && w.subbasin !== sub) return false;
         if (cty && w.county !== cty) return false;
         if (st && w.status !== st) return false;
@@ -270,6 +272,7 @@ function wirePointInteractions() {
         const ext = w.extTotal ? `${w.extTotal.toLocaleString()} AF` : "—";
         popup.innerHTML =
             `<div class="popup-title">${w.well_name || "Well " + w.well_id}</div>
+             ${w.owner_name ? `<div class="popup-row"><span class="popup-label">Owner</span><span class="popup-value">${w.owner_name}</span></div>` : ""}
              <div class="popup-row"><span class="popup-label">Purpose</span><span class="popup-value">${w.purpose}</span></div>
              <div class="popup-row"><span class="popup-label">Status</span><span class="popup-value">${w.status}</span></div>
              <div class="popup-row"><span class="popup-label">Extraction</span><span class="popup-value">${ext}</span></div>
@@ -334,7 +337,7 @@ function showDetail(w) {
             ${row("Total reported", w.extTotal ? `<strong>${w.extTotal.toLocaleString()} AF</strong>${w.ext_flag ? ` <span class="flag-warn">⚠ likely reporting error</span>` : ""}` : "No extraction reported")}
             ${wy ? row("By water year", wy) : ""}
             ${sparkline(w.monthly)}
-            ${w.owner_total_af ? `<div class="detail-divider">Owner (personal info redacted)</div>${row("Owner total extraction", (+w.owner_total_af).toLocaleString() + " AF")}${row("Owner # wells", w.owner_num_wells)}` : ""}
+            ${w.owner_name ? `<div class="detail-divider">Owner</div>${row("Owner", w.owner_name)}${row("Owner total extraction", (w.owner_total_af ? (+w.owner_total_af).toLocaleString() : "0") + " AF")}${row("Owner # wells", w.owner_num_wells)}<div class="detail-note">Owner name is public record (CA GEARS); owner address &amp; contact info are redacted in the source data.</div>` : `<div class="detail-divider">Owner</div><div class="detail-note">No owner record listed for this well's reporting contact.</div>`}
         </div>`;
     panel.classList.remove("hidden");
 }
@@ -354,7 +357,7 @@ document.getElementById("color-mode").addEventListener("change", (e) => {
 /* ── Filter wiring ───────────────────────────────────────────────── */
 ["filter-subbasin","filter-county","filter-status","filter-purpose","filter-method","filter-deminimis"]
     .forEach(id => document.getElementById(id).addEventListener("change", applyFilters));
-["filter-ext-min","filter-ext-max","filter-year-min","filter-year-max","filter-depth-min","filter-depth-max"]
+["filter-owner","filter-ext-min","filter-ext-max","filter-year-min","filter-year-max","filter-depth-min","filter-depth-max"]
     .forEach(id => document.getElementById(id).addEventListener("input", debounce(applyFilters, 300)));
 document.getElementById("filter-hasext").addEventListener("change", applyFilters);
 document.getElementById("clear-filters").addEventListener("click", () => {
