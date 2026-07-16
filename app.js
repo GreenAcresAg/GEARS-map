@@ -69,7 +69,7 @@ map = new maplibregl.Map({
             labels: { type: "raster", tiles: ["https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, maxzoom: 19 },
             roads: { type: "raster", tiles: ["https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, maxzoom: 19 },
         },
-        glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+        glyphs: "vendor/fonts/{fontstack}/{range}.pbf",
         layers: [
             { id: "satellite", type: "raster", source: "satellite" },
             { id: "roads", type: "raster", source: "roads", paint: { "raster-opacity": 0.8 } },
@@ -456,14 +456,95 @@ function loadPOU() {
     }).catch(err => console.error("POU load error:", err));
 }
 const SUBBASIN_COLORS = { "Kings":"#06b6d4","Tulare Lake":"#8b5cf6","Kaweah":"#ec4899","Tule":"#14b8a6","Westside":"#f43f5e","Pleasant Valley":"#eab308" };
+let gsaStats = {};
 function loadGSAs() {
-    fetch("data/surrounding_gsas.geojson").then(r => r.json()).then(data => {
+    Promise.all([
+        fetch("data/surrounding_gsas.geojson").then(r => r.json()),
+        fetch("data/gsa_stats.json").then(r => r.json()).catch(() => ({})),
+    ]).then(([data, stats]) => {
+        gsaStats = stats;
+        // short label for on-map text (drop the long "…Sustainability Agency" tail)
+        data.features.forEach(f => {
+            const n = f.properties.GSA_Name || "";
+            f.properties.label = n.replace(/Groundwater Sustainability Agency/i, "GSA").replace(/\s+GSA JPA$/i, " GSA");
+        });
         map.addSource("gsas", { type: "geojson", data });
-        map.addLayer({ id: "gsas-fill", type: "fill", source: "gsas", layout: { visibility: "none" },
+        map.addLayer({ id: "gsas-fill", type: "fill", source: "gsas", layout: { visibility: "visible" },
             paint: { "fill-color": ["match",["get","subbasin"],...Object.entries(SUBBASIN_COLORS).flat(),"#94a3b8"], "fill-opacity": 0.05 } });
-        map.addLayer({ id: "gsas-line", type: "line", source: "gsas", layout: { visibility: "none" },
+        map.addLayer({ id: "gsas-line", type: "line", source: "gsas", layout: { visibility: "visible" },
             paint: { "line-color": ["match",["get","subbasin"],...Object.entries(SUBBASIN_COLORS).flat(),"#94a3b8"], "line-width": 1.8, "line-opacity": 0.85 } });
+
+        // one label point per GSA name (centroid of its largest polygon part) to avoid
+        // MultiPolygon parts each drawing their own repeated label
+        const ringArea = r => { let a = 0; for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += (r[j][0] * r[i][1] - r[i][0] * r[j][1]); return Math.abs(a / 2); };
+        const centroid = r => { let x = 0, y = 0; for (const p of r) { x += p[0]; y += p[1]; } return [x / r.length, y / r.length]; };
+        const best = {};
+        data.features.forEach(f => {
+            const polys = f.geometry.type === "MultiPolygon" ? f.geometry.coordinates : [f.geometry.coordinates];
+            for (const poly of polys) {
+                const a = ringArea(poly[0]);
+                const key = f.properties.GSA_Name;
+                if (!best[key] || a > best[key].area) best[key] = { area: a, center: centroid(poly[0]), props: f.properties };
+            }
+        });
+        const labelPts = { type: "FeatureCollection", features: Object.values(best).map(b =>
+            ({ type: "Feature", geometry: { type: "Point", coordinates: b.center }, properties: b.props })) };
+        map.addSource("gsas-label-pts", { type: "geojson", data: labelPts });
+        map.addLayer({ id: "gsas-labels", type: "symbol", source: "gsas-label-pts",
+            layout: { visibility: "visible", "text-field": ["get","label"],
+                "text-size": ["interpolate",["linear"],["zoom"],7,10,11,15],
+                "text-max-width": 8, "text-allow-overlap": false, "text-padding": 4,
+                "symbol-placement": "point", "text-font": ["Noto Sans Bold"] },
+            paint: { "text-color": "#f8fafc", "text-halo-color": "#0f172a", "text-halo-width": 1.6, "text-halo-blur": 0.4 } });
+
+        map.on("mouseenter", "gsas-fill", () => { map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", "gsas-fill", () => { map.getCanvas().style.cursor = ""; });
+        map.on("click", "gsas-fill", (e) => {
+            // let a well click win if a well point is under the cursor
+            const wells = map.queryRenderedFeatures(e.point, { layers: ["wells-points"] });
+            if (wells.length) return;
+            showGsaStats(e.features[0].properties.GSA_Name);
+        });
     }).catch(err => console.error("GSA load error:", err));
+}
+function catColor(mode, key) {
+    const c = COLOR_MODES[mode] && COLOR_MODES[mode].cats.find(x => x[0] === key);
+    return c ? c[1] : "#6b7280";
+}
+function breakdownRows(obj, mode, withExt) {
+    return Object.entries(obj).map(([k, v]) => {
+        const wells = withExt ? v.wells : v;
+        const ext = withExt && v.ext ? ` · ${Math.round(v.ext).toLocaleString()} AF` : "";
+        return `<div class="detail-row"><span class="detail-label"><span class="cat-dot" style="background:${catColor(mode, k)}"></span>${k}</span><span class="detail-value">${wells.toLocaleString()} well${wells === 1 ? "" : "s"}${ext}</span></div>`;
+    }).join("");
+}
+function showGsaStats(name) {
+    const s = gsaStats[name];
+    const panel = document.getElementById("detail-panel");
+    document.getElementById("detail-count").textContent = name;
+    if (!s) {
+        document.getElementById("detail-list").innerHTML = `<div class="detail-well"><div class="detail-note">No GEARS wells reported within this GSA.</div></div>`;
+        panel.classList.remove("hidden"); return;
+    }
+    const flagNote = s.flagged_wells ? `<div class="detail-note">Excludes ${s.flagged_wells} well${s.flagged_wells === 1 ? "" : "s"} flagged as a likely reporting error.</div>` : "";
+    document.getElementById("detail-list").innerHTML = `
+        <div class="detail-well">
+            <div class="detail-well-header"><span class="detail-dot" style="background:${SUBBASIN_COLORS[s.subbasin] || "#94a3b8"}"></span>
+                <strong>${s.subbasin} Subbasin${s.num ? ` (${s.num})` : ""}</strong></div>
+            ${row("Wells reported", `<strong>${s.wells.toLocaleString()}</strong>`)}
+            ${row("Total reported extraction", `<strong>${Math.round(s.ext).toLocaleString()} AF</strong>`)}
+            ${row("Reporting accounts", s.accounts.toLocaleString())}
+            ${row("De minimis wells", s.de_minimis.toLocaleString())}
+            ${flagNote}
+            <div class="detail-divider">Wells &amp; extraction by purpose</div>
+            ${breakdownRows(s.by_purpose, "purpose", true)}
+            <div class="detail-divider">Wells by status</div>
+            ${breakdownRows(s.by_status, "status", false)}
+            <div class="detail-divider">Wells by measurement method</div>
+            ${breakdownRows(s.by_method, "method", false)}
+            <div class="detail-note">Wells assigned to GSAs by point-in-polygon on reported coordinates. Extraction is self-reported to GEARS (Jul 2024 – Dec 2025 window).</div>
+        </div>`;
+    panel.classList.remove("hidden");
 }
 function loadCorcoranClay() {
     fetch("data/corcoran_clay.geojson").then(r => r.json()).then(data => {
@@ -492,7 +573,7 @@ document.querySelectorAll("[data-layer]").forEach(cb => cb.addEventListener("cha
 }));
 document.getElementById("toggle-all-gsas").addEventListener("change", (e) => {
     const vis = e.target.checked ? "visible" : "none";
-    ["gsas-fill","gsas-line"].forEach(l => { if (map.getLayer(l)) map.setLayoutProperty(l, "visibility", vis); });
+    ["gsas-fill","gsas-line","gsas-labels"].forEach(l => { if (map.getLayer(l)) map.setLayoutProperty(l, "visibility", vis); });
 });
 
 /* ── Basemap / fullscreen / sidebar (from SFKGSA map) ────────────── */
