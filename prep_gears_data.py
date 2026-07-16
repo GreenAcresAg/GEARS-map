@@ -39,16 +39,31 @@ ext_wy      = collections.defaultdict(lambda: collections.defaultdict(float))
 ext_total   = collections.defaultdict(float)
 methods     = collections.defaultdict(set)
 def add_ext(rows, is_et):
+    # Collapse GEARS re-submissions: multiple rows sharing (Well ID, POU APN, Water Year)
+    # are revisions of the same record, not additive. Keep the max per month (a later
+    # submission supersedes; disjoint months are preserved since the other row is 0).
+    groups = collections.OrderedDict()
     for r in rows:
-        wids = ids(r["Well ID"]);  n = len(wids) or 1
+        key = (str(r.get("Well ID", "")).strip(), str(r.get("POU APN", "")).strip(),
+               (r.get("GEARS Water Year") or "").strip())
         vol = [num(r.get(c)) for c in MCOL]
-        wytag = WY_MAP.get((r.get("GEARS Water Year") or "").strip(), "other")
         tech = "ET" if is_et else (r.get("Groundwater Measurement Technique") or "").strip()
+        if key not in groups:
+            groups[key] = {"wid": r.get("Well ID", ""), "wy": (r.get("GEARS Water Year") or "").strip(),
+                           "vol": vol, "tech": set()}
+        else:
+            gv = groups[key]["vol"]
+            for i, v in enumerate(vol): gv[i] = max(gv[i], v)
+        if tech: groups[key]["tech"].add(tech)
+    for g in groups.values():
+        wids = ids(g["wid"]);  n = len(wids) or 1
+        vol = g["vol"]
+        wytag = WY_MAP.get(g["wy"], "other")
         for w in wids:
-            for i,v in enumerate(vol): ext_monthly[w][i] += v/n
+            for i, v in enumerate(vol): ext_monthly[w][i] += v/n
             s = sum(vol)/n
             ext_total[w] += s; ext_wy[w][wytag] += s
-            if tech: methods[w].add(tech)
+            for t in g["tech"]: methods[w].add(t)
 add_ext(rd("ext"), False)
 add_ext(rd("et"),  True)
 
