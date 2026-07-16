@@ -649,11 +649,13 @@ function showGsaStats(name) {
     clearWellPOU();
     const s = gsaStats[name];
     const panel = document.getElementById("detail-panel");
-    document.getElementById("detail-count").textContent = name;
     if (!s) {
+        document.getElementById("detail-count").textContent = name;
         document.getElementById("detail-list").innerHTML = `<div class="detail-well"><div class="detail-note">No GEARS wells reported within this GSA.</div></div>`;
         panel.classList.remove("hidden"); return;
     }
+    // Title bar = subbasin (context); the dotted heading below = the GSA you clicked
+    document.getElementById("detail-count").textContent = `${s.subbasin} Subbasin${s.num ? ` (${s.num})` : ""}`;
     const flagNote = s.flagged_wells ? `<div class="detail-note">Excludes ${s.flagged_wells} well${s.flagged_wells === 1 ? "" : "s"} flagged as a likely reporting error.</div>` : "";
     const sub = (gsaStats.__subbasins__ || {})[s.subbasin];
     const share = sub && sub.ext > 0 ? Math.round(100 * s.ext / sub.ext) : null;
@@ -666,7 +668,7 @@ function showGsaStats(name) {
     document.getElementById("detail-list").innerHTML = `
         <div class="detail-well">
             <div class="detail-well-header"><span class="detail-dot" style="background:${SUBBASIN_COLORS[s.subbasin] || "#94a3b8"}"></span>
-                <strong>${s.subbasin} Subbasin${s.num ? ` (${s.num})` : ""}</strong></div>
+                <strong>${name}</strong></div>
             ${row("Wells reported", `<strong>${s.wells.toLocaleString()}</strong>`)}
             ${row("Total reported extraction", `<strong>${Math.round(s.ext).toLocaleString()} AF</strong>`)}
             ${row("Reporting accounts", s.accounts.toLocaleString())}
