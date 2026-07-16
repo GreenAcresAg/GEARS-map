@@ -117,6 +117,7 @@
     <div class="sidebar-section sidebar-stats">
         <div><span id="well-count">0</span> wells shown</div>
         <div class="stats-sub"><span id="ext-sum">0</span> AF total extraction (shown)</div>
+        <button id="filter-stats-btn" class="btn-summary">📊 Summary of current selection</button>
     </div>
 
     <!-- ── Context layers ────────────────────────────────── -->
@@ -210,6 +211,14 @@
         <button id="detail-close" class="detail-close-btn">&times;</button>
     </div>
     <div id="detail-list" class="detail-list"></div>
+</div>
+
+<div id="filter-stats-panel" class="detail-panel filter-stats-panel hidden">
+    <div class="detail-header">
+        <span id="filter-stats-title">Current selection</span>
+        <button id="filter-stats-close" class="detail-close-btn">&times;</button>
+    </div>
+    <div id="filter-stats-list" class="detail-list"></div>
 </div>
 
 <script src="vendor/maplibre-gl.js"></script>

@@ -447,6 +447,37 @@ body {
 
 .detail-panel.hidden { display: none; }
 
+/* Filtered-selection summary popup — floats just right of the sidebar */
+.filter-stats-panel {
+    right: auto;
+    left: 296px;
+    width: 320px;
+    z-index: 19;
+}
+.btn-summary {
+    margin-top: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    background: #0f3a4d;
+    border: 1px solid #0e7490;
+    color: #e0f2fe;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.btn-summary:hover { background: #155e75; }
+.btn-summary.active { background: #0e7490; border-color: #22d3ee; }
+.filter-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.filter-chip {
+    font-size: 10.5px;
+    background: #334155;
+    color: #cbd5e1;
+    border-radius: 10px;
+    padding: 1px 8px;
+    white-space: nowrap;
+}
+
 .detail-header {
     display: flex;
     justify-content: space-between;

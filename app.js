@@ -190,6 +190,7 @@ function applyFilters() {
     const gj = wellsToGeoJSON(filteredWells);
     updateMap(gj);
     updateCounts();
+    renderFilterStats();
     closeDetailPanel();
 }
 function wellsToGeoJSON(wells) {
@@ -210,6 +211,78 @@ function updateCounts() {
     document.getElementById("well-count").textContent = filteredWells.length.toLocaleString();
     document.getElementById("ext-sum").textContent = Math.round(extSum).toLocaleString();
 }
+
+/* ── Filtered-selection summary (same stats shape as the GSA panel) ── */
+function computeStats(wells) {
+    const s = { wells: wells.length, ext: 0, flagged_wells: 0, de_minimis: 0,
+        contacts: new Set(), by_purpose: {}, by_status: {}, by_method: {} };
+    wells.forEach(w => {
+        const flagged = !!w.ext_flag;
+        if (flagged) s.flagged_wells++; else s.ext += w.extTotal;
+        if (w.contact_id) s.contacts.add(w.contact_id);
+        if ((w.de_minimis || "").toUpperCase() === "TRUE") s.de_minimis++;
+        const p = w.purpose || "Unknown";
+        (s.by_purpose[p] = s.by_purpose[p] || { wells: 0, ext: 0 }).wells++;
+        s.by_purpose[p].ext += flagged ? 0 : w.extTotal;
+        const st = w.status || "Unknown"; s.by_status[st] = (s.by_status[st] || 0) + 1;
+        const mt = w.method || "Not reported"; s.by_method[mt] = (s.by_method[mt] || 0) + 1;
+    });
+    const byVal = (o, key) => Object.fromEntries(Object.entries(o).sort((a, b) => (key ? b[1][key] : b[1]) - (key ? a[1][key] : a[1])));
+    return { wells: s.wells, ext: s.ext, flagged_wells: s.flagged_wells, de_minimis: s.de_minimis,
+        accounts: s.contacts.size, by_purpose: byVal(s.by_purpose, "wells"),
+        by_status: byVal(s.by_status, null), by_method: byVal(s.by_method, null) };
+}
+function describeFilters() {
+    const chips = [], add = (label, v) => { if (v) chips.push(`${label}: ${v}`); };
+    add("Subbasin", fval("filter-subbasin")); add("County", fval("filter-county"));
+    add("Status", fval("filter-status")); add("Purpose", fval("filter-purpose")); add("Method", fval("filter-method"));
+    const dm = fval("filter-deminimis"); if (dm) chips.push(dm === "TRUE" ? "De minimis only" : "Non-de-minimis only");
+    const owner = fval("filter-owner").trim(); if (owner) chips.push(`Contact ~ "${owner}"`);
+    const eMin = fval("filter-ext-min"), eMax = fval("filter-ext-max"); if (eMin || eMax) chips.push(`Ext ${eMin || "0"}–${eMax || "∞"} AF`);
+    const yMin = fval("filter-year-min"), yMax = fval("filter-year-max"); if (yMin || yMax) chips.push(`Year ${yMin || "…"}–${yMax || "…"}`);
+    const dMin = fval("filter-depth-min"), dMax = fval("filter-depth-max"); if (dMin || dMax) chips.push(`Depth ${dMin || "0"}–${dMax || "∞"} ft`);
+    if (document.getElementById("filter-hasext").checked) chips.push("Has extraction data");
+    const allCats = COLOR_MODES[colorMode].cats.map(c => c[0]);
+    if (activeCats.size < allCats.length) chips.push(`${COLOR_MODES[colorMode].label}: ${[...activeCats].join(", ")}`);
+    return chips;
+}
+function renderFilterStats() {
+    const panel = document.getElementById("filter-stats-panel");
+    if (!panel || panel.classList.contains("hidden")) return;
+    const s = computeStats(filteredWells), chips = describeFilters();
+    document.getElementById("filter-stats-title").textContent =
+        `Selection — ${s.wells.toLocaleString()} of ${allWells.length.toLocaleString()} wells`;
+    const flagNote = s.flagged_wells ? `<div class="detail-note">Excludes ${s.flagged_wells} well${s.flagged_wells === 1 ? "" : "s"} flagged as a likely reporting error.</div>` : "";
+    const chipHtml = chips.length
+        ? `<div class="filter-chips">${chips.map(c => `<span class="filter-chip">${c}</span>`).join("")}</div>`
+        : `<div class="detail-note">No filters applied — showing all wells.</div>`;
+    document.getElementById("filter-stats-list").innerHTML = `
+        <div class="detail-well">
+            ${chipHtml}
+            ${row("Wells", `<strong>${s.wells.toLocaleString()}</strong>`)}
+            ${row("Total reported extraction", `<strong>${Math.round(s.ext).toLocaleString()} AF</strong>`)}
+            ${row("Reporting accounts", s.accounts.toLocaleString())}
+            ${row("De minimis wells", s.de_minimis.toLocaleString())}
+            ${flagNote}
+            <div class="detail-divider">Wells &amp; extraction by purpose</div>
+            ${breakdownRows(s.by_purpose, "purpose", true)}
+            <div class="detail-divider">Wells by status</div>
+            ${breakdownRows(s.by_status, "status", false)}
+            <div class="detail-divider">Wells by measurement method</div>
+            ${breakdownRows(s.by_method, "method", false)}
+            <div class="detail-note">Live totals for the current left-panel filter selection. Extraction is self-reported to GEARS (Jul 2024 – Dec 2025).</div>
+        </div>`;
+}
+document.getElementById("filter-stats-btn").addEventListener("click", () => {
+    const panel = document.getElementById("filter-stats-panel"), btn = document.getElementById("filter-stats-btn");
+    const open = panel.classList.toggle("hidden") === false;
+    btn.classList.toggle("active", open);
+    if (open) renderFilterStats();
+});
+document.getElementById("filter-stats-close").addEventListener("click", () => {
+    document.getElementById("filter-stats-panel").classList.add("hidden");
+    document.getElementById("filter-stats-btn").classList.remove("active");
+});
 
 /* ── Map layers (heatmap + points) ───────────────────────────────── */
 const RADIUS_FIXED = ["interpolate",["linear"],["zoom"],8,2.5,12,4,16,7];
