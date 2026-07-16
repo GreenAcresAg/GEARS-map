@@ -272,7 +272,7 @@ function wirePointInteractions() {
         const ext = w.extTotal ? `${w.extTotal.toLocaleString()} AF` : "—";
         popup.innerHTML =
             `<div class="popup-title">${w.well_name || "Well " + w.well_id}</div>
-             ${w.owner_name ? `<div class="popup-row"><span class="popup-label">Owner</span><span class="popup-value">${w.owner_name}</span></div>` : ""}
+             ${w.owner_name ? `<div class="popup-row"><span class="popup-label">Reporting contact</span><span class="popup-value">${w.owner_name}</span></div>` : ""}
              <div class="popup-row"><span class="popup-label">Purpose</span><span class="popup-value">${w.purpose}</span></div>
              <div class="popup-row"><span class="popup-label">Status</span><span class="popup-value">${w.status}</span></div>
              <div class="popup-row"><span class="popup-label">Extraction</span><span class="popup-value">${ext}</span></div>
@@ -337,7 +337,7 @@ function showDetail(w) {
             ${row("Total reported", w.extTotal ? `<strong>${w.extTotal.toLocaleString()} AF</strong>${w.ext_flag ? ` <span class="flag-warn">⚠ likely reporting error</span>` : ""}` : "No extraction reported")}
             ${wy ? row("By water year", wy) : ""}
             ${sparkline(w.monthly)}
-            ${w.owner_name ? `<div class="detail-divider">Owner</div>${row("Owner", w.owner_name)}${row("Owner total extraction", (w.owner_total_af ? (+w.owner_total_af).toLocaleString() : "0") + " AF")}${row("Owner # wells", w.owner_num_wells)}<div class="detail-note">Owner name is public record (CA GEARS); owner address &amp; contact info are redacted in the source data.</div>` : `<div class="detail-divider">Owner</div><div class="detail-note">No owner record listed for this well's reporting contact.</div>`}
+            ${w.owner_name ? `<div class="detail-divider">Reporting contact</div>${row("Reporting contact", w.owner_name)}${row("Contact total extraction", (w.owner_total_af ? (+w.owner_total_af).toLocaleString() : "0") + " AF")}${row("Contact # wells", w.owner_num_wells)}<div class="detail-note">Name of the GEARS account that registered this well — the self-supplied reporting contact, which may be a manager or agent rather than the legal landowner. Address &amp; contact info are redacted in the source data.</div>` : `<div class="detail-divider">Reporting contact</div><div class="detail-note">No contact record listed for this well.</div>`}
         </div>`;
     panel.classList.remove("hidden");
 }
@@ -358,7 +358,7 @@ function pouPopup(e) {
          ${d.pou ? `<div class="popup-row"><span class="popup-label">POU</span><span class="popup-value">${d.pou}</span></div>` : ""}
          <div class="popup-row"><span class="popup-label">Purpose</span><span class="popup-value">${d.purpose}</span></div>
          <div class="popup-row"><span class="popup-label">Attributed extraction</span><span class="popup-value">${d.ext.toLocaleString()} AF</span></div>
-         ${d.owner ? `<div class="popup-row"><span class="popup-label">Owner</span><span class="popup-value">${d.owner}</span></div>` : ""}
+         ${d.owner ? `<div class="popup-row"><span class="popup-label">Reporting contact</span><span class="popup-value">${d.owner}</span></div>` : ""}
          <div class="popup-row"><span class="popup-label">Wells serving</span><span class="popup-value">${d.wells}</span></div>`;
     popup.classList.remove("hidden");
     popup.style.left = (e.originalEvent.clientX + 12) + "px";
