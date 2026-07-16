@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEARS Groundwater Extraction Map — Tulare Lake & Tule Subbasins</title>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<button id="sidebar-toggle" class="sidebar-toggle-btn">&#9776;</button>
+<div id="sidebar" class="sidebar-open">
+    <div class="sidebar-branding">
+        <img src="data/logo.png" alt="Green Acres Consulting, Inc." class="sidebar-logo">
+        <p class="branding-credit">Created by Green Acres Consulting, Inc.</p>
+    </div>
+
+    <div class="sidebar-header">
+        <h1>GEARS Groundwater Extraction Map</h1>
+        <p class="subtitle">Tulare Lake &amp; Tule Subbasins</p>
+    </div>
+
+    <!-- ── Symbology / view switcher ─────────────────────── -->
+    <div class="sidebar-section">
+        <h3 class="section-title">Color Wells By</h3>
+        <select id="color-mode" class="filter-control">
+            <option value="extraction">Extraction Volume (AF)</option>
+            <option value="purpose" selected>Purpose of Use</option>
+            <option value="status">Status</option>
+            <option value="method">Measurement Method</option>
+        </select>
+        <div id="legend" class="legend"></div>
+        <div id="category-toggles" class="well-type-toggles"></div>
+        <label class="layer-toggle" style="margin-top:8px">
+            <input type="checkbox" data-layer="wells-heat" checked>
+            <span class="toggle-swatch" style="background:linear-gradient(90deg,#00ff00,#ffff00,#ff0000)"></span>
+            Density Heatmap
+        </label>
+        <label class="layer-toggle sub-toggle">
+            <input type="checkbox" id="heat-weight-ext">
+            <span class="toggle-swatch" style="background:#38bdf8"></span>
+            Weight heatmap by extraction
+        </label>
+    </div>
+
+    <!-- ── Filters ───────────────────────────────────────── -->
+    <div class="sidebar-section">
+        <h3 class="section-title">Filters</h3>
+
+        <div class="filter-group">
+            <label class="filter-label">Subbasin</label>
+            <select id="filter-subbasin" class="filter-control"><option value="">All Subbasins</option></select>
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">County</label>
+            <select id="filter-county" class="filter-control"><option value="">All Counties</option></select>
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Status</label>
+            <select id="filter-status" class="filter-control"><option value="">All Statuses</option></select>
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Purpose of Use</label>
+            <select id="filter-purpose" class="filter-control"><option value="">All Purposes</option></select>
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Measurement Method</label>
+            <select id="filter-method" class="filter-control"><option value="">All Methods</option></select>
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">De Minimis</label>
+            <select id="filter-deminimis" class="filter-control">
+                <option value="">All</option>
+                <option value="TRUE">De minimis only</option>
+                <option value="FALSE">Non-de-minimis only</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Extraction Volume (AF)</label>
+            <div class="range-inputs">
+                <input type="number" id="filter-ext-min" class="filter-control filter-control--half" placeholder="Min">
+                <span class="range-sep">&ndash;</span>
+                <input type="number" id="filter-ext-max" class="filter-control filter-control--half" placeholder="Max">
+            </div>
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Year Pumping Began</label>
+            <div class="range-inputs">
+                <input type="number" id="filter-year-min" class="filter-control filter-control--half" placeholder="Min">
+                <span class="range-sep">&ndash;</span>
+                <input type="number" id="filter-year-max" class="filter-control filter-control--half" placeholder="Max">
+            </div>
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Total Depth (ft)</label>
+            <div class="range-inputs">
+                <input type="number" id="filter-depth-min" class="filter-control filter-control--half" placeholder="Min">
+                <span class="range-sep">&ndash;</span>
+                <input type="number" id="filter-depth-max" class="filter-control filter-control--half" placeholder="Max">
+            </div>
+        </div>
+        <label class="layer-toggle sub-toggle">
+            <input type="checkbox" id="filter-hasext">
+            <span class="toggle-swatch" style="background:#22c55e"></span>
+            Only wells with extraction data
+        </label>
+
+        <button id="clear-filters" class="btn-clear">Clear All Filters</button>
+    </div>
+
+    <div class="sidebar-section sidebar-stats">
+        <div><span id="well-count">0</span> wells shown</div>
+        <div class="stats-sub"><span id="ext-sum">0</span> AF total extraction (shown)</div>
+    </div>
+
+    <!-- ── Context layers ────────────────────────────────── -->
+    <div class="sidebar-section">
+        <h3 class="section-title">Context Layers</h3>
+        <label class="layer-toggle">
+            <input type="checkbox" data-layer="parcels">
+            <span class="toggle-swatch" style="background:#f97316"></span>
+            Kings County Parcels
+        </label>
+        <label class="layer-toggle">
+            <input type="checkbox" data-layer="crops">
+            <span class="toggle-swatch" style="background:linear-gradient(90deg,#16a34a,#eab308,#dc2626)"></span>
+            Crop Boundaries (Kings, 2024)
+        </label>
+        <label class="layer-toggle">
+            <input type="checkbox" data-layer="corcoran-clay">
+            <span class="toggle-swatch" style="background:linear-gradient(90deg,#93c5fd,#1e3a5f)"></span>
+            Corcoran Clay Thickness
+        </label>
+        <label class="layer-toggle">
+            <input type="checkbox" data-layer="corcoran-depth">
+            <span class="toggle-swatch" style="background:linear-gradient(90deg,#fca5a5,#7f1d1d)"></span>
+            Corcoran Clay Depth
+        </label>
+        <p class="disclaimer-text">Parcels &amp; crops cover Kings County only; wells extend into Tulare County (Tule Subbasin).</p>
+    </div>
+
+    <!-- ── GSA boundaries ────────────────────────────────── -->
+    <div class="sidebar-section">
+        <h3 class="section-title">GSA Boundaries</h3>
+        <label class="layer-toggle">
+            <input type="checkbox" id="toggle-all-gsas">
+            <span class="toggle-swatch" style="background:#8b5cf6"></span>
+            Show all subbasin GSAs
+        </label>
+    </div>
+
+    <div class="sidebar-section sidebar-disclaimer">
+        <h3 class="section-title">Data Sources</h3>
+        <p>All data shown is from publicly available datasets:</p>
+        <ul>
+            <li><a href="https://data.ca.gov/dataset/gears" target="_blank">GEARS Groundwater Extraction Data</a> &mdash; CA Water Boards (portal export 2026-07-13)</li>
+            <li><a href="https://sgma.water.ca.gov/webgis/?appid=SGMADataViewer" target="_blank">GSA Boundaries</a> &mdash; SGMA Data Viewer</li>
+            <li><a href="https://www.usgs.gov/publications/corcoran-clay-central-valley-california" target="_blank">Corcoran Clay Data</a> &mdash; USGS</li>
+        </ul>
+        <p class="disclaimer-text">This map is for informational purposes only. Well locations and reported extraction volumes are as self-reported to GEARS and are subject to ongoing verification. Owner personal information is redacted in the source data.</p>
+    </div>
+</div>
+
+<div id="map"></div>
+
+<button id="fullscreen-btn" class="fullscreen-btn" title="Toggle fullscreen">
+    <svg id="fs-expand" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+        <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+    </svg>
+    <svg id="fs-collapse" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+        <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/>
+        <line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>
+    </svg>
+</button>
+
+<div id="basemap-selector" class="basemap-selector">
+    <button id="basemap-btn" class="basemap-btn" title="Change basemap">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+    </button>
+    <div id="basemap-menu" class="basemap-menu hidden">
+        <div class="basemap-option active" data-basemap="hybrid"><div class="basemap-thumb hybrid-thumb"></div><span>Hybrid</span></div>
+        <div class="basemap-option" data-basemap="satellite"><div class="basemap-thumb satellite-thumb"></div><span>Satellite</span></div>
+        <div class="basemap-option" data-basemap="usgs"><div class="basemap-thumb usgs-thumb"></div><span>USGS Topo</span></div>
+        <div class="basemap-option" data-basemap="streets"><div class="basemap-thumb streets-thumb"></div><span>Streets</span></div>
+    </div>
+</div>
+
+<div id="popup" class="map-popup hidden"></div>
+
+<div id="detail-panel" class="detail-panel hidden">
+    <div class="detail-header">
+        <span id="detail-count"></span>
+        <button id="detail-close" class="detail-close-btn">&times;</button>
+    </div>
+    <div id="detail-list" class="detail-list"></div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/pmtiles@3.0.6/dist/pmtiles.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
