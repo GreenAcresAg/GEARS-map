@@ -448,6 +448,8 @@ function loadParcels() {
 
 /* ── Selected-well Place-of-Use highlight ────────────────────────── */
 let hlKings = [];
+let pouCentroids = {};
+fetch("data/pou_centroids.json").then(r => r.json()).then(d => pouCentroids = d).catch(() => {});
 function reapplyHighlight() {
     hlKings.forEach(apn => map.setFeatureState({ source: "parcels", sourceLayer: "parcels", id: apn }, { hl: true }));
 }
@@ -467,9 +469,22 @@ function highlightWellPOU(w) {
     const filt = tulare.length ? ["in", ["get", "APN"], ["literal", tulare]] : ["==", ["get", "APN"], "__none__"];
     if (map.getLayer("pou-hl-tulare-fill")) map.setFilter("pou-hl-tulare-fill", filt);
     if (map.getLayer("pou-hl-tulare-line")) map.setFilter("pou-hl-tulare-line", filt);
-    // parcels tiles only exist at z>=10; nudge in so the highlight is actually visible
+    fitToPOU(w, [...hlKings, ...tulare]);
+}
+// Frame the well together with its POU parcels (uses precomputed parcel centroids)
+function fitToPOU(w, apns) {
     const lon = num(w.longitude), lat = num(w.latitude);
-    if (lon != null && lat != null && map.getZoom() < 10.5) map.easeTo({ center: [lon, lat], zoom: 12, duration: 700 });
+    const pts = [];
+    if (lon != null && lat != null) pts.push([lon, lat]);
+    apns.forEach(a => { if (pouCentroids[a]) pts.push(pouCentroids[a]); });
+    if (pts.length > 1) {
+        const lons = pts.map(p => p[0]), lats = pts.map(p => p[1]);
+        map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
+            { padding: { top: 70, bottom: 70, left: 70, right: 390 }, maxZoom: 14, duration: 800 });
+    } else if (lon != null && lat != null && map.getZoom() < 10.5) {
+        // no parcel geometry available; still nudge in so the well's tiles/highlight load
+        map.easeTo({ center: [lon, lat], zoom: 12, duration: 700 });
+    }
 }
 
 // POU per-parcel attributes, keyed by APN → set as feature-state on the parcels source
