@@ -347,6 +347,25 @@ map.on("click", (e) => {
     if (!map.queryRenderedFeatures(e.point, { layers: ["wells-points"] }).length) closeDetailPanel();
 });
 
+/* ── Places-of-Use parcel hover popup ────────────────────────────── */
+map.on("mousemove", "pou-fill", (e) => {
+    if (!e.features.length) return;
+    const apn = e.features[0].properties.APN, d = pouData[apn];
+    if (!d) return;
+    map.getCanvas().style.cursor = "pointer";
+    popup.innerHTML =
+        `<div class="popup-title">Parcel ${apn}</div>
+         ${d.pou ? `<div class="popup-row"><span class="popup-label">POU</span><span class="popup-value">${d.pou}</span></div>` : ""}
+         <div class="popup-row"><span class="popup-label">Purpose</span><span class="popup-value">${d.purpose}</span></div>
+         <div class="popup-row"><span class="popup-label">Attributed extraction</span><span class="popup-value">${d.ext.toLocaleString()} AF</span></div>
+         ${d.owner ? `<div class="popup-row"><span class="popup-label">Owner</span><span class="popup-value">${d.owner}</span></div>` : ""}
+         <div class="popup-row"><span class="popup-label">Wells serving</span><span class="popup-value">${d.wells}</span></div>`;
+    popup.classList.remove("hidden");
+    popup.style.left = (e.originalEvent.clientX + 12) + "px";
+    popup.style.top  = (e.originalEvent.clientY - 12) + "px";
+});
+map.on("mouseleave", "pou-fill", () => { map.getCanvas().style.cursor = ""; popup.classList.add("hidden"); });
+
 /* ── Color-mode switch ───────────────────────────────────────────── */
 document.getElementById("color-mode").addEventListener("change", (e) => {
     colorMode = e.target.value;
@@ -376,12 +395,53 @@ function loadCrops() {
         layout: { visibility: "none" }, minzoom: 12, paint: { "line-color": "#1e293b", "line-width": 0.5, "line-opacity": 0.5 } });
 }
 function loadParcels() {
-    map.addSource("parcels", { type: "vector", url: "pmtiles://data/kings_parcels.pmtiles" });
+    // promoteId APN so we can feature-state-join GEARS Place-of-Use data onto parcels
+    map.addSource("parcels", { type: "vector", url: "pmtiles://data/kings_parcels.pmtiles",
+        promoteId: { parcels: "APN" } });
     map.addLayer({ id: "parcels-fill", type: "fill", source: "parcels", "source-layer": "parcels",
         layout: { visibility: "none" }, minzoom: 12, paint: { "fill-color": "transparent" } });
     map.addLayer({ id: "parcels", type: "line", source: "parcels", "source-layer": "parcels",
         layout: { visibility: "none" }, minzoom: 12,
         paint: { "line-color": "#f97316", "line-width": ["interpolate",["linear"],["zoom"],12,0.5,15,1.5], "line-opacity": 0.7 } });
+
+    // ── Places of Use (parcels served by GEARS wells) — feature-state join ──
+    map.addLayer({ id: "pou-fill", type: "fill", source: "parcels", "source-layer": "parcels",
+        layout: { visibility: "none" }, minzoom: 9,
+        paint: {
+            "fill-color": ["coalesce", ["feature-state", "color"], "rgba(0,0,0,0)"],
+            "fill-opacity": ["case", ["boolean", ["feature-state", "pou"], false], 0.6, 0],
+        } });
+    map.addLayer({ id: "pou-outline", type: "line", source: "parcels", "source-layer": "parcels",
+        layout: { visibility: "none" }, minzoom: 11,
+        paint: {
+            "line-color": "#0f172a",
+            "line-width": ["case", ["boolean", ["feature-state", "pou"], false], 0.6, 0],
+            "line-opacity": 0.6,
+        } });
+    loadPOU();
+}
+
+// POU per-parcel attributes, keyed by APN → set as feature-state on the parcels source
+let pouData = {};
+function colorForExt(v) {
+    const bins = COLOR_MODES.extraction.cats; // [["< 50","#.."],...,["No data",..]]
+    const key = classifyExtraction(v);
+    const hit = bins.find(b => b[0] === key);
+    return hit ? hit[1] : "#64748b";
+}
+function loadPOU() {
+    fetch("data/pou_parcels.json").then(r => r.json()).then(data => {
+        pouData = data;
+        const apply = () => {
+            for (const apn in data) {
+                map.setFeatureState({ source: "parcels", sourceLayer: "parcels", id: apn },
+                    { pou: true, color: colorForExt(data[apn].ext) });
+            }
+        };
+        apply();
+        // re-apply when new parcel tiles load (feature-state must be re-set as tiles arrive)
+        map.on("sourcedata", (e) => { if (e.sourceId === "parcels" && e.isSourceLoaded) apply(); });
+    }).catch(err => console.error("POU load error:", err));
 }
 const SUBBASIN_COLORS = { "Kings":"#06b6d4","Tulare Lake":"#8b5cf6","Kaweah":"#ec4899","Tule":"#14b8a6","Westside":"#f43f5e","Pleasant Valley":"#eab308" };
 function loadGSAs() {
@@ -414,6 +474,7 @@ function loadCorcoranDepth() {
 document.querySelectorAll("[data-layer]").forEach(cb => cb.addEventListener("change", () => {
     const id = cb.dataset.layer, vis = cb.checked ? "visible" : "none";
     const groups = { crops:["crops","crops-fill"], parcels:["parcels","parcels-fill"],
+        pou:["pou-fill","pou-outline"],
         "corcoran-clay":["corcoran-clay"], "corcoran-depth":["corcoran-depth"], "wells-heat":["wells-heat"] };
     (groups[id] || [id]).forEach(l => { if (map.getLayer(l)) map.setLayoutProperty(l, "visibility", vis); });
 }));
