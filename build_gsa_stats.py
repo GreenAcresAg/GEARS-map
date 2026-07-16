@@ -71,6 +71,8 @@ def blank():
             "by_method": defaultdict(int)}
 
 agg = {g["name"]: blank() for g in gsas}
+name2sub = {g["name"]: g["subbasin"] for g in gsas}
+subagg = defaultdict(lambda: {"wells": 0, "ext": 0.0, "flagged": 0, "de_minimis": 0, "contacts": set()})
 unassigned = 0
 
 for w in WELLS:
@@ -103,6 +105,13 @@ for w in WELLS:
     a["by_purpose"][purpose]["ext"] += 0.0 if flagged else ext
     a["by_status"][w.get("status") or "Unknown"] += 1
     a["by_method"][w.get("method") or "Not reported"] += 1
+    # roll up to the GSA's subbasin
+    sa = subagg[name2sub[hit]]
+    sa["wells"] += 1
+    if flagged: sa["flagged"] += 1
+    else: sa["ext"] += ext
+    if w.get("contact_id"): sa["contacts"].add(w["contact_id"])
+    if str(w.get("de_minimis")).upper() == "TRUE": sa["de_minimis"] += 1
 
 out = {}
 for g in gsas:
@@ -117,10 +126,18 @@ for g in gsas:
         "by_method": dict(sorted(a["by_method"].items(), key=lambda kv: -kv[1])),
     }
 
+# subbasin rollups (reserved key; GSA names never collide with "__subbasins__")
+out["__subbasins__"] = {s: {
+        "wells": v["wells"], "ext": round(v["ext"], 1), "accounts": len(v["contacts"]),
+        "de_minimis": v["de_minimis"], "flagged_wells": v["flagged"],
+        "gsa_count": sum(1 for g in gsas if g["subbasin"] == s),
+    } for s, v in sorted(subagg.items(), key=lambda kv: -kv[1]["ext"])}
+
 json.dump(out, open(OUT, "w"), separators=(",", ":"))
-total_wells = sum(v["wells"] for v in out.values())
-print(f"wrote {len(out)} GSAs -> {OUT}")
+total_wells = sum(v["wells"] for k, v in out.items() if k != "__subbasins__")
+gsa_rows = {k: v for k, v in out.items() if k != "__subbasins__"}
+print(f"wrote {len(gsa_rows)} GSAs + {len(out['__subbasins__'])} subbasin rollups -> {OUT}")
 print(f"assigned {total_wells}/{len(WELLS)} wells; {unassigned} unassigned (outside all GSA polygons)")
-print("top GSAs by wells:")
-for name, v in sorted(out.items(), key=lambda kv: -kv[1]["wells"])[:8]:
-    print(f"  {name:<42} wells={v['wells']:>4}  ext={v['ext']:>12,.0f} AF  accounts={v['accounts']:>4}")
+print("subbasin totals:")
+for s, v in out["__subbasins__"].items():
+    print(f"  {s:<18} wells={v['wells']:>4}  ext={v['ext']:>12,.0f} AF  accounts={v['accounts']:>4}  ({v['gsa_count']} GSAs)")

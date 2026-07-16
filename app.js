@@ -582,6 +582,14 @@ function showGsaStats(name) {
         panel.classList.remove("hidden"); return;
     }
     const flagNote = s.flagged_wells ? `<div class="detail-note">Excludes ${s.flagged_wells} well${s.flagged_wells === 1 ? "" : "s"} flagged as a likely reporting error.</div>` : "";
+    const sub = (gsaStats.__subbasins__ || {})[s.subbasin];
+    const share = sub && sub.ext > 0 ? Math.round(100 * s.ext / sub.ext) : null;
+    const subSection = sub ? `
+            <div class="detail-divider">${s.subbasin} subbasin total${sub.gsa_count ? ` — ${sub.gsa_count} GSAs` : ""}</div>
+            ${row("Wells reported", sub.wells.toLocaleString())}
+            ${row("Total reported extraction", `${Math.round(sub.ext).toLocaleString()} AF`)}
+            ${row("Reporting accounts", sub.accounts.toLocaleString())}
+            ${share != null ? row("This GSA's share", `${share}% of subbasin extraction`) : ""}` : "";
     document.getElementById("detail-list").innerHTML = `
         <div class="detail-well">
             <div class="detail-well-header"><span class="detail-dot" style="background:${SUBBASIN_COLORS[s.subbasin] || "#94a3b8"}"></span>
@@ -597,7 +605,8 @@ function showGsaStats(name) {
             ${breakdownRows(s.by_status, "status", false)}
             <div class="detail-divider">Wells by measurement method</div>
             ${breakdownRows(s.by_method, "method", false)}
-            <div class="detail-note">Wells assigned to GSAs by point-in-polygon on reported coordinates. Extraction is self-reported to GEARS (Jul 2024 – Dec 2025 window).</div>
+            ${subSection}
+            <div class="detail-note">Wells assigned to GSAs by point-in-polygon on reported coordinates. Extraction is self-reported to GEARS (Jul 2024 – Dec 2025 window). Subbasin totals sum all GSAs in the subbasin.</div>
         </div>`;
     panel.classList.remove("hidden");
 }
