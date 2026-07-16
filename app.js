@@ -340,8 +340,9 @@ function showDetail(w) {
             ${w.owner_name ? `<div class="detail-divider">Reporting contact</div>${row("Reporting contact", w.owner_name)}${row("Contact total extraction", (w.owner_total_af ? (+w.owner_total_af).toLocaleString() : "0") + " AF")}${row("Contact # wells", w.owner_num_wells)}<div class="detail-note">Name of the GEARS account that registered this well — the self-supplied reporting contact, which may be a manager or agent rather than the legal landowner. Address &amp; contact info are redacted in the source data.</div>` : `<div class="detail-divider">Reporting contact</div><div class="detail-note">No contact record listed for this well.</div>`}
         </div>`;
     panel.classList.remove("hidden");
+    highlightWellPOU(w);
 }
-function closeDetailPanel(){ document.getElementById("detail-panel").classList.add("hidden"); }
+function closeDetailPanel(){ document.getElementById("detail-panel").classList.add("hidden"); clearWellPOU(); }
 document.getElementById("detail-close").addEventListener("click", closeDetailPanel);
 map.on("click", (e) => {
     if (!map.queryRenderedFeatures(e.point, { layers: ["wells-points"] }).length) closeDetailPanel();
@@ -431,6 +432,44 @@ function loadParcels() {
     map.addLayer({ id: "pou-tulare-outline", type: "line", source: "pou-tulare",
         layout: { visibility: "none" }, minzoom: 11,
         paint: { "line-color": "#0f172a", "line-width": 0.6, "line-opacity": 0.6 } });
+
+    // ── Selected-well POU highlight (always on; renders only the selected well's parcels) ──
+    // Kings parcels driven by feature-state "hl"; Tulare (geojson) driven by setFilter.
+    const HL_NONE = ["==", ["get", "APN"], "__none__"];
+    map.addLayer({ id: "pou-hl-kings-fill", type: "fill", source: "parcels", "source-layer": "parcels", minzoom: 8,
+        paint: { "fill-color": "#22d3ee", "fill-opacity": ["case", ["boolean", ["feature-state", "hl"], false], 0.3, 0] } });
+    map.addLayer({ id: "pou-hl-kings-line", type: "line", source: "parcels", "source-layer": "parcels", minzoom: 8,
+        paint: { "line-color": "#06b6d4", "line-width": ["case", ["boolean", ["feature-state", "hl"], false], 2.6, 0], "line-opacity": 0.95 } });
+    map.addLayer({ id: "pou-hl-tulare-fill", type: "fill", source: "pou-tulare", filter: HL_NONE, minzoom: 8,
+        paint: { "fill-color": "#22d3ee", "fill-opacity": 0.3 } });
+    map.addLayer({ id: "pou-hl-tulare-line", type: "line", source: "pou-tulare", filter: HL_NONE, minzoom: 8,
+        paint: { "line-color": "#06b6d4", "line-width": 2.6, "line-opacity": 0.95 } });
+}
+
+/* ── Selected-well Place-of-Use highlight ────────────────────────── */
+let hlKings = [];
+function reapplyHighlight() {
+    hlKings.forEach(apn => map.setFeatureState({ source: "parcels", sourceLayer: "parcels", id: apn }, { hl: true }));
+}
+function clearWellPOU() {
+    hlKings.forEach(apn => map.setFeatureState({ source: "parcels", sourceLayer: "parcels", id: apn }, { hl: false }));
+    hlKings = [];
+    const none = ["==", ["get", "APN"], "__none__"];
+    if (map.getLayer("pou-hl-tulare-fill")) map.setFilter("pou-hl-tulare-fill", none);
+    if (map.getLayer("pou-hl-tulare-line")) map.setFilter("pou-hl-tulare-line", none);
+}
+function highlightWellPOU(w) {
+    clearWellPOU();
+    const apns = (w.pou_apns || "").split(";").map(s => s.trim()).filter(Boolean);
+    hlKings = apns.filter(a => a.length === 12);           // Kings parcels (pmtiles feature-state)
+    const tulare = apns.filter(a => a.length === 9);        // Tulare parcels (geojson filter)
+    reapplyHighlight();
+    const filt = tulare.length ? ["in", ["get", "APN"], ["literal", tulare]] : ["==", ["get", "APN"], "__none__"];
+    if (map.getLayer("pou-hl-tulare-fill")) map.setFilter("pou-hl-tulare-fill", filt);
+    if (map.getLayer("pou-hl-tulare-line")) map.setFilter("pou-hl-tulare-line", filt);
+    // parcels tiles only exist at z>=10; nudge in so the highlight is actually visible
+    const lon = num(w.longitude), lat = num(w.latitude);
+    if (lon != null && lat != null && map.getZoom() < 10.5) map.easeTo({ center: [lon, lat], zoom: 12, duration: 700 });
 }
 
 // POU per-parcel attributes, keyed by APN → set as feature-state on the parcels source
@@ -452,7 +491,7 @@ function loadPOU() {
         };
         apply();
         // re-apply when new parcel tiles load (feature-state must be re-set as tiles arrive)
-        map.on("sourcedata", (e) => { if (e.sourceId === "parcels" && e.isSourceLoaded) apply(); });
+        map.on("sourcedata", (e) => { if (e.sourceId === "parcels" && e.isSourceLoaded) { apply(); reapplyHighlight(); } });
     }).catch(err => console.error("POU load error:", err));
 }
 const SUBBASIN_COLORS = { "Kings":"#06b6d4","Tulare Lake":"#8b5cf6","Kaweah":"#ec4899","Tule":"#14b8a6","Westside":"#f43f5e","Pleasant Valley":"#eab308" };
@@ -519,6 +558,7 @@ function breakdownRows(obj, mode, withExt) {
     }).join("");
 }
 function showGsaStats(name) {
+    clearWellPOU();
     const s = gsaStats[name];
     const panel = document.getElementById("detail-panel");
     document.getElementById("detail-count").textContent = name;
